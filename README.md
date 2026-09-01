@@ -40,3 +40,13 @@ Por isso, aumentar --pages amplia o alcance, mas faz mais requisicoes.
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
+## Interface grafica
+
+Execute:
+
+```powershell
+.\.venv\Scripts\python.exe .\gui.py
+```
+
+A janela permite informar as credenciais, escolher o alcance, formato e arquivo de
+saida. De um duplo clique em um resultado para abrir o MP link no navegador.
