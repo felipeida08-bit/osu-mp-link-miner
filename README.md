@@ -26,10 +26,14 @@ A busca da interface funciona como uma fila:
 
 - recebe paginas da API em ordem decrescente de MP ID;
 - verifica ate 5 partidas em paralelo por padrao;
+- libera no maximo uma nova requisicao por segundo;
 - continua indefinidamente quando o limite de paginas e zero;
 - para e salva os resultados quando o usuario clica em **Parar**;
 - exibe pagina, partidas verificadas, encontradas e MP ID atual;
 - renova automaticamente o token OAuth em execucoes longas.
+
+O intervalo minimo e 1,0 segundo, seguindo a orientacao oficial de no maximo
+60 requisicoes por minuto.
 
 O campo **Verificar um MP diretamente** aceita um ID ou um link completo, por
 exemplo `https://osu.ppy.sh/community/matches/121788519`.

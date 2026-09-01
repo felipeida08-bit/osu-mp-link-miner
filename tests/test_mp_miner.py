@@ -6,7 +6,7 @@ from pathlib import Path
 
 from gui import parse_match_id
 from mp_miner import (
-    MatchResult, has_user, match_has_user, save, scan, scan_queue, verify_match,
+    MatchResult, has_user, make_parser, match_has_user, save, scan, scan_queue, verify_match,
 )
 
 
@@ -99,6 +99,11 @@ class Tests(unittest.TestCase):
         self.assertEqual(parse_match_id("121788519"), 121788519)
         with self.assertRaises(ValueError):
             parse_match_id("sem-id")
+
+    def test_pausa_padrao_respeita_limite_oficial(self):
+        args = make_parser().parse_args(
+            ["nick", "--client-id", "1", "--client-secret", "secret"])
+        self.assertEqual(args.delay, 1.0)
 
     def test_txt(self):
         row = MatchResult(1, "https://osu.ppy.sh/community/matches/1", "x", "x", None)

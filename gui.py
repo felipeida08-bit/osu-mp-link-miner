@@ -37,7 +37,7 @@ class MinerGui(tk.Tk):
         self.pages = tk.StringVar(value="0")
         self.workers = tk.StringVar(value="5")
         self.since = tk.StringVar()
-        self.delay = tk.StringVar(value="0.05")
+        self.delay = tk.StringVar(value="1.0")
         self.format = tk.StringVar(value="json")
         self.output = tk.StringVar()
         self.direct_mp = tk.StringVar()
@@ -82,7 +82,7 @@ class MinerGui(tk.Tk):
         ttk.Entry(options, textvariable=self.since, width=12).grid(
             row=0, column=5, padx=(6, 16)
         )
-        ttk.Label(options, text="Pausa").grid(row=0, column=6)
+        ttk.Label(options, text="Pausa (min 1s)").grid(row=0, column=6)
         ttk.Entry(options, textvariable=self.delay, width=6).grid(
             row=0, column=7, padx=(6, 0)
         )
@@ -180,8 +180,8 @@ class MinerGui(tk.Tk):
             pages = int(self.pages.get())
             workers = int(self.workers.get())
             delay = float(self.delay.get().replace(",", "."))
-            if pages < 0 or not 1 <= workers <= 10 or delay < 0:
-                raise ValueError("Valores fora do intervalo.")
+            if pages < 0 or not 1 <= workers <= 10 or delay < 1.0:
+                raise ValueError("Use pausa minima de 1.0 segundo.")
             since = iso_date(self.since.get().strip()) if self.since.get().strip() else None
         except (ValueError, argparse.ArgumentTypeError) as exc:
             messagebox.showerror("Valor invalido", str(exc))
@@ -225,6 +225,8 @@ class MinerGui(tk.Tk):
             nick, client_id, secret = self._credentials()
             match_id = parse_match_id(self.direct_mp.get())
             delay = float(self.delay.get().replace(",", "."))
+            if delay < 1.0:
+                raise ValueError("Use pausa minima de 1.0 segundo.")
         except ValueError as exc:
             messagebox.showerror("Valor invalido", str(exc))
             return

@@ -46,10 +46,10 @@ def iso_date(value):
 class OsuApi:
     """Cliente thread-safe com renovacao de token e intervalo global."""
 
-    def __init__(self, client_id, secret, delay=.05):
+    def __init__(self, client_id, secret, delay=1.0):
         self.client_id = client_id
         self.secret = secret
-        self.delay = delay
+        self.delay = max(float(delay), 1.0)
         self.token = None
         self.token_expires_at = 0.0
         self._token_lock = threading.Lock()
@@ -297,7 +297,7 @@ def make_parser():
     parser.add_argument("nickname")
     parser.add_argument("--pages", type=int, default=5, help="paginas de 50 partidas")
     parser.add_argument("--since", type=iso_date, help="data minima em UTC")
-    parser.add_argument("--delay", type=float, default=.05)
+    parser.add_argument("--delay", type=float, default=1.0)
     parser.add_argument("--format", choices=("json", "csv", "txt"), default="json")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--client-id", default=os.getenv("OSU_CLIENT_ID"))
@@ -308,8 +308,8 @@ def make_parser():
 def main(argv=None):
     parser = make_parser()
     args = parser.parse_args(argv)
-    if args.pages < 1 or args.delay < 0:
-        parser.error("--pages deve ser positivo e --delay nao pode ser negativo")
+    if args.pages < 1 or args.delay < 1.0:
+        parser.error("--pages deve ser positivo e --delay deve ser pelo menos 1.0")
     if not args.client_id or not args.client_secret:
         parser.error("defina OSU_CLIENT_ID e OSU_CLIENT_SECRET (veja README.md)")
     safe = re.sub(r"[^A-Za-z0-9._-]+", "_", args.nickname).strip("._") or "jogador"
