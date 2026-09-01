@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Interface grafica para o osu MP Link Miner."""
+import argparse
 import os
 import queue
 import re
@@ -9,28 +10,40 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from mp_miner import ApiError, OsuApi, iso_date, save, scan
+from mp_miner import ApiError, OsuApi, iso_date, save, scan_queue, verify_match
+
+
+def parse_match_id(value):
+    match = re.search(r"(?:community/matches/)?(\d+)/?(?:\?.*)?$", value.strip())
+    if not match:
+        raise ValueError("Informe um MP ID ou link community/matches valido.")
+    return int(match.group(1))
 
 
 class MinerGui(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("osu! MP Link Miner")
-        self.geometry("820x620")
-        self.minsize(700, 520)
+        self.geometry("880x700")
+        self.minsize(760, 600)
         self.messages = queue.Queue()
         self.results = []
         self.last_output = None
+        self.stop_event = threading.Event()
 
         self.nickname = tk.StringVar()
         self.client_id = tk.StringVar(value=os.getenv("OSU_CLIENT_ID", ""))
         self.client_secret = tk.StringVar(value=os.getenv("OSU_CLIENT_SECRET", ""))
-        self.pages = tk.StringVar(value="5")
+        self.pages = tk.StringVar(value="0")
+        self.workers = tk.StringVar(value="5")
         self.since = tk.StringVar()
-        self.delay = tk.StringVar(value="0.15")
+        self.delay = tk.StringVar(value="0.05")
         self.format = tk.StringVar(value="json")
         self.output = tk.StringVar()
-        self.status = tk.StringVar(value="Preencha os dados e clique em Buscar.")
+        self.direct_mp = tk.StringVar()
+        self.status = tk.StringVar(
+            value="Limite 0: busca do maior MP ID para o menor ate voce parar."
+        )
         self._build()
         self.after(100, self._poll)
 
@@ -38,11 +51,11 @@ class MinerGui(tk.Tk):
         root = ttk.Frame(self, padding=18)
         root.pack(fill="both", expand=True)
         root.columnconfigure(1, weight=1)
-        root.rowconfigure(9, weight=1)
+        root.rowconfigure(11, weight=1)
 
-        ttk.Label(root, text="osu! MP Link Miner",
-                  font=("Segoe UI", 18, "bold")).grid(
-            row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
+        ttk.Label(
+            root, text="osu! MP Link Miner", font=("Segoe UI", 18, "bold")
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 14))
 
         fields = [
             ("Nickname", self.nickname, False),
@@ -51,126 +64,237 @@ class MinerGui(tk.Tk):
         ]
         for row, (label, variable, secret) in enumerate(fields, 1):
             ttk.Label(root, text=label).grid(row=row, column=0, sticky="w", pady=4)
-            entry = ttk.Entry(root, textvariable=variable, show="*" if secret else "")
-            entry.grid(row=row, column=1, columnspan=2, sticky="ew", pady=4)
+            ttk.Entry(
+                root, textvariable=variable, show="*" if secret else ""
+            ).grid(row=row, column=1, columnspan=2, sticky="ew", pady=4)
 
         options = ttk.Frame(root)
         options.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(8, 4))
-        ttk.Label(options, text="Paginas (50 partidas cada)").grid(row=0, column=0)
-        ttk.Spinbox(options, from_=1, to=100000, textvariable=self.pages,
-                    width=8).grid(row=0, column=1, padx=(6, 18))
-        ttk.Label(options, text="Desde (AAAA-MM-DD)").grid(row=0, column=2)
-        ttk.Entry(options, textvariable=self.since, width=14).grid(
-            row=0, column=3, padx=(6, 18))
-        ttk.Label(options, text="Pausa (s)").grid(row=0, column=4)
-        ttk.Entry(options, textvariable=self.delay, width=7).grid(
-            row=0, column=5, padx=(6, 0))
+        ttk.Label(options, text="Limite paginas (0=ate parar)").grid(row=0, column=0)
+        ttk.Spinbox(
+            options, from_=0, to=100000, textvariable=self.pages, width=8
+        ).grid(row=0, column=1, padx=(6, 16))
+        ttk.Label(options, text="Paralelas").grid(row=0, column=2)
+        ttk.Spinbox(
+            options, from_=1, to=10, textvariable=self.workers, width=5
+        ).grid(row=0, column=3, padx=(6, 16))
+        ttk.Label(options, text="Desde").grid(row=0, column=4)
+        ttk.Entry(options, textvariable=self.since, width=12).grid(
+            row=0, column=5, padx=(6, 16)
+        )
+        ttk.Label(options, text="Pausa").grid(row=0, column=6)
+        ttk.Entry(options, textvariable=self.delay, width=6).grid(
+            row=0, column=7, padx=(6, 0)
+        )
 
         ttk.Label(root, text="Formato").grid(row=5, column=0, sticky="w", pady=4)
-        format_box = ttk.Combobox(root, textvariable=self.format,
-                                  values=("json", "csv", "txt"),
-                                  state="readonly", width=8)
-        format_box.grid(row=5, column=1, sticky="w", pady=4)
+        ttk.Combobox(
+            root, textvariable=self.format, values=("json", "csv", "txt"),
+            state="readonly", width=8,
+        ).grid(row=5, column=1, sticky="w", pady=4)
 
         ttk.Label(root, text="Arquivo de saida").grid(
-            row=6, column=0, sticky="w", pady=4)
+            row=6, column=0, sticky="w", pady=4
+        )
         ttk.Entry(root, textvariable=self.output).grid(
-            row=6, column=1, sticky="ew", pady=4)
+            row=6, column=1, sticky="ew", pady=4
+        )
         ttk.Button(root, text="Escolher...", command=self._choose_output).grid(
-            row=6, column=2, padx=(8, 0), pady=4)
+            row=6, column=2, padx=(8, 0), pady=4
+        )
+
+        direct = ttk.LabelFrame(root, text="Verificar um MP diretamente", padding=8)
+        direct.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 4))
+        direct.columnconfigure(0, weight=1)
+        ttk.Entry(direct, textvariable=self.direct_mp).grid(
+            row=0, column=0, sticky="ew"
+        )
+        self.verify_button = ttk.Button(
+            direct, text="Verificar link/ID", command=self._verify
+        )
+        self.verify_button.grid(row=0, column=1, padx=(8, 0))
 
         actions = ttk.Frame(root)
-        actions.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(10, 8))
-        self.search_button = ttk.Button(actions, text="Buscar partidas",
-                                        command=self._start)
+        actions.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(10, 8))
+        self.search_button = ttk.Button(
+            actions, text="Iniciar fila", command=self._start
+        )
         self.search_button.pack(side="left")
-        ttk.Button(actions, text="Copiar link", command=self._copy).pack(
-            side="left", padx=8)
-        self.open_button = ttk.Button(actions, text="Abrir arquivo",
-                                      command=self._open_output, state="disabled")
-        self.open_button.pack(side="left")
+        self.stop_button = ttk.Button(
+            actions, text="Parar", command=self._stop, state="disabled"
+        )
+        self.stop_button.pack(side="left", padx=8)
+        ttk.Button(actions, text="Copiar link", command=self._copy).pack(side="left")
+        self.open_button = ttk.Button(
+            actions, text="Abrir arquivo", command=self._open_output, state="disabled"
+        )
+        self.open_button.pack(side="left", padx=8)
 
         self.progress = ttk.Progressbar(root, mode="indeterminate")
-        self.progress.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+        self.progress.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(0, 6))
         ttk.Label(root, textvariable=self.status).grid(
-            row=9, column=0, columnspan=3, sticky="nw")
+            row=10, column=0, columnspan=3, sticky="w"
+        )
 
-        list_frame = ttk.Frame(root)
-        list_frame.grid(row=10, column=0, columnspan=3, sticky="nsew", pady=(8, 0))
-        root.rowconfigure(10, weight=1)
-        list_frame.rowconfigure(0, weight=1)
-        list_frame.columnconfigure(0, weight=1)
-        self.listbox = tk.Listbox(list_frame, font=("Consolas", 10))
+        frame = ttk.Frame(root)
+        frame.grid(row=11, column=0, columnspan=3, sticky="nsew", pady=(8, 0))
+        frame.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        self.listbox = tk.Listbox(frame, font=("Consolas", 10))
         self.listbox.grid(row=0, column=0, sticky="nsew")
-        scrollbar = ttk.Scrollbar(list_frame, orient="vertical",
-                                  command=self.listbox.yview)
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self.listbox.yview)
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.listbox.configure(yscrollcommand=scrollbar.set)
         self.listbox.bind("<Double-Button-1>", self._open_link)
+
+    def _credentials(self):
+        nick = self.nickname.get().strip()
+        client_id = self.client_id.get().strip()
+        secret = self.client_secret.get()
+        if not nick or not client_id or not secret:
+            raise ValueError("Informe nickname, Client ID e Client Secret.")
+        return nick, client_id, secret
 
     def _choose_output(self):
         fmt = self.format.get()
         path = filedialog.asksaveasfilename(
             defaultextension=f".{fmt}",
-            filetypes=[(fmt.upper(), f"*.{fmt}"), ("Todos", "*.*")])
+            filetypes=[(fmt.upper(), f"*.{fmt}"), ("Todos", "*.*")],
+        )
         if path:
             self.output.set(path)
 
+    def _set_busy(self, busy):
+        state = "disabled" if busy else "normal"
+        self.search_button.configure(state=state)
+        self.verify_button.configure(state=state)
+        self.stop_button.configure(state="normal" if busy else "disabled")
+        if busy:
+            self.progress.start(12)
+        else:
+            self.progress.stop()
+
     def _start(self):
-        nick = self.nickname.get().strip()
-        if not nick or not self.client_id.get().strip() or not self.client_secret.get():
-            messagebox.showerror("Dados incompletos",
-                                 "Informe nickname, Client ID e Client Secret.")
-            return
         try:
+            nick, client_id, secret = self._credentials()
             pages = int(self.pages.get())
+            workers = int(self.workers.get())
             delay = float(self.delay.get().replace(",", "."))
-            if pages < 1 or delay < 0:
-                raise ValueError
+            if pages < 0 or not 1 <= workers <= 10 or delay < 0:
+                raise ValueError("Valores fora do intervalo.")
             since = iso_date(self.since.get().strip()) if self.since.get().strip() else None
-        except (ValueError, argparse.ArgumentTypeError):
-            messagebox.showerror("Valor invalido",
-                                 "Revise paginas, data (AAAA-MM-DD) e pausa.")
+        except (ValueError, argparse.ArgumentTypeError) as exc:
+            messagebox.showerror("Valor invalido", str(exc))
             return
 
         fmt = self.format.get()
         safe = re.sub(r"[^A-Za-z0-9._-]+", "_", nick).strip("._") or "jogador"
         output = Path(self.output.get().strip() or f"resultados_{safe}.{fmt}")
-        self.search_button.configure(state="disabled")
-        self.open_button.configure(state="disabled")
+        self.results = []
         self.listbox.delete(0, "end")
-        self.status.set("Buscando partidas publicas... Isso pode demorar.")
-        self.progress.start(12)
-        args = (nick, self.client_id.get().strip(), self.client_secret.get(),
-                pages, since, delay, fmt, output)
-        threading.Thread(target=self._worker, args=args, daemon=True).start()
+        self.stop_event = threading.Event()
+        self._set_busy(True)
+        self.open_button.configure(state="disabled")
+        self.status.set("Preparando fila em ordem decrescente de MP ID...")
+        args = (
+            nick, client_id, secret, pages or None, workers,
+            since, delay, fmt, output, self.stop_event,
+        )
+        threading.Thread(target=self._scan_worker, args=args, daemon=True).start()
 
-    def _worker(self, nick, client_id, secret, pages, since, delay, fmt, output):
+    def _scan_worker(self, nick, client_id, secret, pages, workers,
+                     since, delay, fmt, output, stop_event):
         try:
             api = OsuApi(client_id, secret, delay)
             user = api.user(nick)
-            results = scan(api, int(user["id"]), pages, since, progress=False)
+            results = scan_queue(
+                api, int(user["id"]), stop_event, workers=workers,
+                since=since, max_pages=pages,
+                on_progress=lambda info: self.messages.put(("progress", info)),
+            )
             save(results, output, fmt)
-            self.messages.put(("done", user.get("username", nick), results, output))
+            self.messages.put(
+                ("scan_done", user.get("username", nick), results, output,
+                 stop_event.is_set())
+            )
         except (ApiError, OSError, KeyError, ValueError) as exc:
             self.messages.put(("error", str(exc)))
+
+    def _verify(self):
+        try:
+            nick, client_id, secret = self._credentials()
+            match_id = parse_match_id(self.direct_mp.get())
+            delay = float(self.delay.get().replace(",", "."))
+        except ValueError as exc:
+            messagebox.showerror("Valor invalido", str(exc))
+            return
+        self.stop_event = threading.Event()
+        self._set_busy(True)
+        self.status.set(f"Verificando MP {match_id}...")
+        threading.Thread(
+            target=self._verify_worker,
+            args=(nick, client_id, secret, delay, match_id),
+            daemon=True,
+        ).start()
+
+    def _verify_worker(self, nick, client_id, secret, delay, match_id):
+        try:
+            api = OsuApi(client_id, secret, delay)
+            user = api.user(nick)
+            result = verify_match(api, match_id, int(user["id"]))
+            self.messages.put(
+                ("verify_done", user.get("username", nick), match_id, result)
+            )
+        except (ApiError, OSError, KeyError, ValueError) as exc:
+            self.messages.put(("error", str(exc)))
+
+    def _stop(self):
+        self.stop_event.set()
+        self.stop_button.configure(state="disabled")
+        self.status.set("Parando a fila e salvando os resultados...")
 
     def _poll(self):
         try:
             while True:
                 message = self.messages.get_nowait()
-                self.progress.stop()
-                self.search_button.configure(state="normal")
-                if message[0] == "error":
-                    self.status.set("A busca falhou.")
-                    messagebox.showerror("Erro", message[1])
-                else:
-                    _, user, self.results, self.last_output = message
-                    for item in self.results:
-                        self.listbox.insert("end", f"{item.name}  |  {item.link}")
+                kind = message[0]
+                if kind == "progress":
+                    info = message[1]
+                    result = info["result"]
+                    if result:
+                        self.results.append(result)
+                        self.listbox.insert(
+                            "end", f"{result.match_id} | {result.name} | {result.link}"
+                        )
                     self.status.set(
-                        f"{user}: {len(self.results)} partida(s). Salvo em {self.last_output}")
+                        f"Pagina {info['page']} | verificadas {info['checked']} | "
+                        f"encontradas {info['found']} | MP atual {info['match_id']}"
+                    )
+                elif kind == "error":
+                    self._set_busy(False)
+                    self.status.set("A operacao falhou.")
+                    messagebox.showerror("Erro", message[1])
+                elif kind == "scan_done":
+                    _, user, self.results, self.last_output, stopped = message
+                    self._set_busy(False)
                     self.open_button.configure(state="normal")
+                    reason = "interrompida" if stopped else "concluida"
+                    self.status.set(
+                        f"Fila {reason}: {user}, {len(self.results)} partida(s). "
+                        f"Salvo em {self.last_output}"
+                    )
+                elif kind == "verify_done":
+                    _, user, match_id, result = message
+                    self._set_busy(False)
+                    if result:
+                        if all(item.match_id != result.match_id for item in self.results):
+                            self.results.insert(0, result)
+                            self.listbox.insert(
+                                0, f"{result.match_id} | {result.name} | {result.link}"
+                            )
+                        self.status.set(f"{user} participou do MP {match_id}.")
+                    else:
+                        self.status.set(f"{user} nao aparece no MP {match_id}.")
         except queue.Empty:
             pass
         self.after(100, self._poll)
