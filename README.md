@@ -38,6 +38,10 @@ O intervalo minimo e 1,0 segundo, seguindo a orientacao oficial de no maximo
 O campo **Verificar um MP diretamente** aceita um ID ou um link completo, por
 exemplo `https://osu.ppy.sh/community/matches/121788519`.
 
+O Client ID e o Client Secret sao restaurados na proxima abertura. O ID fica no
+arquivo de configuracao local e o Secret e criptografado pelo Windows DPAPI para
+o usuario atual; ele nao e salvo em texto puro nem incluido no repositorio.
+
 Formatos de saida disponiveis: JSON, CSV e TXT. Um duplo clique abre o MP link.
 
 ## Linha de comando

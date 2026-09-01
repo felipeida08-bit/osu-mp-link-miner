@@ -11,6 +11,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+from credential_store import load_credentials, save_credentials
 from mp_miner import ApiError, OsuApi, iso_date, save, scan_queue, verify_match
 
 def resource_path(relative):
@@ -42,9 +43,14 @@ class MinerGui(tk.Tk):
         self.last_output = None
         self.stop_event = threading.Event()
 
+        saved_client_id, saved_secret = load_credentials()
         self.nickname = tk.StringVar()
-        self.client_id = tk.StringVar(value=os.getenv("OSU_CLIENT_ID", ""))
-        self.client_secret = tk.StringVar(value=os.getenv("OSU_CLIENT_SECRET", ""))
+        self.client_id = tk.StringVar(
+            value=os.getenv("OSU_CLIENT_ID", saved_client_id)
+        )
+        self.client_secret = tk.StringVar(
+            value=os.getenv("OSU_CLIENT_SECRET", saved_secret)
+        )
         self.pages = tk.StringVar(value="0")
         self.workers = tk.StringVar(value="5")
         self.since = tk.StringVar()
@@ -56,6 +62,7 @@ class MinerGui(tk.Tk):
             value="Limite 0: busca do maior MP ID para o menor ate voce parar."
         )
         self._build()
+        self.protocol("WM_DELETE_WINDOW", self._close)
         self.after(100, self._poll)
 
     def _build(self):
@@ -165,6 +172,20 @@ class MinerGui(tk.Tk):
         if not nick or not client_id or not secret:
             raise ValueError("Informe nickname, Client ID e Client Secret.")
         return nick, client_id, secret
+
+    def _close(self):
+        client_id = self.client_id.get().strip()
+        secret = self.client_secret.get()
+        try:
+            if client_id and secret:
+                save_credentials(client_id, secret)
+        except OSError as exc:
+            messagebox.showwarning(
+                "Credenciais",
+                f"Nao foi possivel salvar as credenciais com seguranca: {exc}",
+            )
+        self.stop_event.set()
+        self.destroy()
 
     def _choose_output(self):
         fmt = self.format.get()
