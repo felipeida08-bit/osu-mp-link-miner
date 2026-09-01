@@ -1,5 +1,8 @@
 # osu MP Link Miner
 
+[![Tests](https://github.com/felipeida08-bit/osu-mp-link-miner/actions/workflows/tests.yml/badge.svg)](https://github.com/felipeida08-bit/osu-mp-link-miner/actions/workflows/tests.yml)
+[![Build Windows](https://github.com/felipeida08-bit/osu-mp-link-miner/actions/workflows/build-windows.yml/badge.svg)](https://github.com/felipeida08-bit/osu-mp-link-miner/actions/workflows/build-windows.yml)
+
 CLI e interface grafica em Python para procurar partidas multiplayer publicas que
 contenham um jogador. O nickname e resolvido para o ID permanente da conta.
 
