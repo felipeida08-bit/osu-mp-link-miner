@@ -62,3 +62,17 @@ ainda nao fazem parte desta busca.
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
+
+## Executavel Windows
+
+O executavel pronto fica em:
+
+```text
+dist\osu-mp-link-miner.exe
+```
+
+Para reproduzir o build:
+
+```powershell
+.\build.ps1
+```

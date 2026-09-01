@@ -5,3 +5,6 @@ resultados_*.json
 resultados_*.csv
 resultados_*.txt
 .env
+build/
+dist/
+*.spec

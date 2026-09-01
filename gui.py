@@ -4,6 +4,7 @@ import argparse
 import os
 import queue
 import re
+import sys
 import threading
 import webbrowser
 from pathlib import Path
@@ -11,6 +12,10 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from mp_miner import ApiError, OsuApi, iso_date, save, scan_queue, verify_match
+
+def resource_path(relative):
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    return base / relative
 
 
 def parse_match_id(value):
@@ -24,6 +29,12 @@ class MinerGui(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("osu! MP Link Miner")
+        try:
+            self._icon_image = tk.PhotoImage(
+                file=resource_path("assets/osu-binoculars.png"))
+            self.iconphoto(True, self._icon_image)
+        except tk.TclError:
+            self._icon_image = None
         self.geometry("880x700")
         self.minsize(760, 600)
         self.messages = queue.Queue()
