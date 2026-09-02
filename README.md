@@ -1,85 +1,183 @@
-# osu MP Link Miner
+# osu! MP Link Miner
 
 [![Tests](https://github.com/felipeida08-bit/osu-mp-link-miner/actions/workflows/tests.yml/badge.svg)](https://github.com/felipeida08-bit/osu-mp-link-miner/actions/workflows/tests.yml)
 [![Build Windows](https://github.com/felipeida08-bit/osu-mp-link-miner/actions/workflows/build-windows.yml/badge.svg)](https://github.com/felipeida08-bit/osu-mp-link-miner/actions/workflows/build-windows.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-CLI e interface grafica em Python para procurar partidas multiplayer publicas que
-contenham um jogador. O nickname e resolvido para o ID permanente da conta.
+Aplicativo com interface grafica e linha de comando para encontrar partidas
+multiplayer publicas do osu! das quais um jogador participou. O programa resolve
+o nickname para o ID permanente da conta, percorre as partidas recentes e salva
+os links encontrados em JSON, CSV ou TXT.
 
-## Configuracao
+## Baixar e usar no Windows
 
-Requer Python 3.10+ e uma aplicacao OAuth criada nas configuracoes do osu.
-O programa usa Client Credentials com escopo public.
+1. Baixe o arquivo `osu-mp-link-miner.exe` na pagina de
+   [Releases](https://github.com/felipeida08-bit/osu-mp-link-miner/releases/latest).
+2. Crie uma aplicacao OAuth nas
+   [configuracoes da sua conta osu!](https://osu.ppy.sh/home/account/edit#new-oauth-application).
+   Informe um nome para a aplicacao. O callback pode ficar vazio, pois o programa
+   usa Client Credentials.
+3. Abra o executavel e preencha seu nickname, o **Client ID** e o
+   **Client Secret** fornecidos pelo osu!.
+4. Defina um limite de paginas (cada pagina lista ate 50 partidas) ou deixe
+   `0` para continuar ate clicar em **Parar**. Clique em **Iniciar fila**.
 
-No PowerShell:
+O botao **Como obter credenciais?** da propria interface abre a pagina correta.
+Cada pessoa deve usar as suas proprias credenciais. Nunca publique nem envie seu
+Client Secret para outra pessoa.
+
+O executavel e gerado automaticamente a partir do codigo deste repositorio.
+O arquivo `.sha256` da mesma Release permite conferir a integridade do download:
+
+```powershell
+Get-FileHash .\osu-mp-link-miner.exe -Algorithm SHA256
+```
+
+## Recursos
+
+- busca da partida mais recente para a mais antiga;
+- ate 5 verificacoes concorrentes por padrao;
+- intervalo global minimo de uma requisicao por segundo;
+- renovacao automatica do token OAuth em buscas longas;
+- parada por data, quantidade de paginas ou pelo botao **Parar**;
+- verificacao direta por MP ID ou link completo;
+- exportacao em JSON, CSV e TXT;
+- duplo clique para abrir uma partida no navegador.
+
+O campo **Verificar um MP diretamente** aceita tanto `121788519` quanto
+`https://osu.ppy.sh/community/matches/121788519`.
+
+### Credenciais locais
+
+No Windows, marque **Lembrar credenciais neste computador** se quiser restaurar
+os campos na proxima abertura. O Client ID fica na configuracao local e o Client
+Secret e protegido pelo Windows DPAPI para o usuario atual. Desmarcar a opcao
+remove as credenciais salvas ao fechar.
+
+Em Linux e macOS, o armazenamento local fica desativado: informe as credenciais
+a cada abertura ou use as variaveis de ambiente descritas abaixo. O segredo
+nunca e incluido no repositorio nem nos arquivos de resultado.
+
+## Executar pelo codigo-fonte
+
+Requer Python 3.10 ou mais recente. O aplicativo usa somente a biblioteca padrao
+do Python em tempo de execucao.
+
+```powershell
+git clone https://github.com/felipeida08-bit/osu-mp-link-miner.git
+cd osu-mp-link-miner
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python gui.py
+```
+
+No Linux ou macOS, ative o ambiente com `source .venv/bin/activate`. Algumas
+distribuicoes Linux exigem a instalacao separada do pacote `python3-tk`.
+
+## Linha de comando
+
+As credenciais podem ser fornecidas por variaveis de ambiente:
 
 ```powershell
 $env:OSU_CLIENT_ID = "SEU_CLIENT_ID"
 $env:OSU_CLIENT_SECRET = "SEU_CLIENT_SECRET"
-cd C:\Users\Felipe\osu_mp_miner
-```
 
-## Interface grafica
-
-```powershell
-.\.venv\Scripts\python.exe .\gui.py
-```
-
-A busca da interface funciona como uma fila:
-
-- recebe paginas da API em ordem decrescente de MP ID;
-- verifica ate 5 partidas em paralelo por padrao;
-- libera no maximo uma nova requisicao por segundo;
-- continua indefinidamente quando o limite de paginas e zero;
-- para e salva os resultados quando o usuario clica em **Parar**;
-- exibe pagina, partidas verificadas, encontradas e MP ID atual;
-- renova automaticamente o token OAuth em execucoes longas.
-
-O intervalo minimo e 1,0 segundo, seguindo a orientacao oficial de no maximo
-60 requisicoes por minuto.
-
-O campo **Verificar um MP diretamente** aceita um ID ou um link completo, por
-exemplo `https://osu.ppy.sh/community/matches/121788519`.
-
-O Client ID e o Client Secret sao restaurados na proxima abertura. O ID fica no
-arquivo de configuracao local e o Secret e criptografado pelo Windows DPAPI para
-o usuario atual; ele nao e salvo em texto puro nem incluido no repositorio.
-
-Formatos de saida disponiveis: JSON, CSV e TXT. Um duplo clique abre o MP link.
-
-## Linha de comando
-
-```powershell
 # Examina ate 1.000 partidas recentes
-.\.venv\Scripts\python.exe .\mp_miner.py "Nickname" --pages 20
+python .\mp_miner.py "Nickname" --pages 20
 
-# Para em uma data e salva somente links
-.\.venv\Scripts\python.exe .\mp_miner.py "Nickname" --pages 100 --since 2026-08-01 --format txt
+# Para em uma data e salva somente os links
+python .\mp_miner.py "Nickname" --pages 100 --since 2026-08-01 --format txt
 ```
 
-## Limitacao
+Em bash, use `export OSU_CLIENT_ID="..."` e
+`export OSU_CLIENT_SECRET="..."`. Tambem e possivel passar
+`--client-id` e `--client-secret` diretamente, mas isso pode deixar o segredo
+visivel no historico do terminal.
 
-A API v2 nao oferece busca de partida legada por jogador. O programa percorre a
-listagem global, da partida mais recente para a mais antiga, e verifica os
-participantes. As salas modernas do osu lazer usam outro sistema (`/rooms`) e
-ainda nao fazem parte desta busca.
+Use `python mp_miner.py --help` para ver todas as opcoes.
 
-## Testes
+## Limitacoes
+
+A API v2 nao oferece uma busca de partidas legadas por jogador. Por isso, o
+programa percorre a listagem global e consulta cada partida, o que pode levar
+tempo. Salas modernas do osu!lazer usam outro sistema (`/rooms`) e nao fazem
+parte desta busca.
+
+O projeto consulta apenas dados publicos disponibilizados pela API oficial.
+Respeite os [termos da osu!api](https://osu.ppy.sh/docs/#terms-of-use) e evite
+buscas continuas desnecessarias.
+
+## Desenvolvimento
+
+Executar os testes:
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+python -m unittest discover -s tests -v
 ```
 
-## Executavel Windows
-
-O executavel pronto fica em:
-
-```text
-dist\osu-mp-link-miner.exe
-```
-
-Para reproduzir o build:
+Gerar o executavel do Windows:
 
 ```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-build.txt
 .\build.ps1
 ```
+
+O diretorio `dist/` e ignorado de proposito: binarios gerados nao ficam no
+historico Git. Ao enviar uma tag `v*`, o GitHub Actions cria o executavel,
+assina e verifica o arquivo, calcula seu SHA-256 e publica os dois arquivos em
+uma GitHub Release:
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+### Assinatura do executavel
+
+Uma Release exige um certificado Authenticode de assinatura de codigo emitido
+por uma autoridade certificadora confiavel. Certificados autoassinados mostram
+o nome do editor apenas em computadores nos quais tenham sido instalados como
+confiaveis e, portanto, nao resolvem o aviso para o publico.
+
+Configure estes Secrets no repositorio antes de criar uma tag:
+
+- `WINDOWS_SIGNING_CERTIFICATE_BASE64`: conteudo Base64 do arquivo PFX;
+- `WINDOWS_SIGNING_CERTIFICATE_PASSWORD`: senha do PFX.
+
+No PowerShell, gere o texto Base64 e envie os Secrets com GitHub CLI:
+
+```powershell
+$certificate = "C:\caminho-seguro\code-signing.pfx"
+$encoded = [Convert]::ToBase64String([IO.File]::ReadAllBytes($certificate))
+$encoded | Set-Content -NoNewline .\certificate-base64.txt
+
+gh secret set WINDOWS_SIGNING_CERTIFICATE_BASE64 --body (Get-Content -Raw .\certificate-base64.txt)
+gh secret set WINDOWS_SIGNING_CERTIFICATE_PASSWORD
+```
+
+O PFX e sua senha nunca devem ser adicionados ao Git. Os padroes `*.pfx`,
+`*.p12` e `certificate-base64.txt` estao bloqueados pelo `.gitignore`.
+Durante o workflow, o certificado existe somente no diretorio temporario do
+runner e e removido mesmo se a assinatura falhar. Uma tag sem os dois Secrets
+falha antes da publicacao, impedindo uma Release oficial sem assinatura.
+
+Para assinar um build local usando um certificado instalado no Windows:
+
+```powershell
+.\sign.ps1 `
+    -ExecutablePath .\dist\osu-mp-link-miner.exe `
+    -CertificateThumbprint "IMPRESSAO_DIGITAL_SHA1_DO_CERTIFICADO"
+```
+
+Tambem e possivel usar `-CertificatePath` e `-CertificatePassword` com um
+PFX. O script usa SHA-256, adiciona carimbo de tempo RFC 3161 e recusa a
+assinatura se a verificacao Authenticode nao retornar `Valid`.
+
+Uma assinatura valida remove a identificacao **Editor desconhecido**. O filtro
+SmartScreen pode continuar exibindo uma advertencia enquanto o novo certificado
+ou aplicativo ainda nao tiver reputacao suficiente.
+
+## Licenca
+
+Distribuido sob a [licenca MIT](LICENSE).

@@ -11,8 +11,17 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from credential_store import load_credentials, save_credentials
+from credential_store import (
+    can_store_credentials,
+    delete_credentials,
+    load_credentials,
+    save_credentials,
+)
 from mp_miner import ApiError, OsuApi, iso_date, save, scan_queue, verify_match
+
+
+OAUTH_SETTINGS_URL = "https://osu.ppy.sh/home/account/edit#new-oauth-application"
+
 
 def resource_path(relative):
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
@@ -51,6 +60,7 @@ class MinerGui(tk.Tk):
         self.client_secret = tk.StringVar(
             value=os.getenv("OSU_CLIENT_SECRET", saved_secret)
         )
+        self.remember_credentials = tk.BooleanVar(value=bool(saved_client_id))
         self.pages = tk.StringVar(value="0")
         self.workers = tk.StringVar(value="5")
         self.since = tk.StringVar()
@@ -69,7 +79,7 @@ class MinerGui(tk.Tk):
         root = ttk.Frame(self, padding=18)
         root.pack(fill="both", expand=True)
         root.columnconfigure(1, weight=1)
-        root.rowconfigure(11, weight=1)
+        root.rowconfigure(12, weight=1)
 
         ttk.Label(
             root, text="osu! MP Link Miner", font=("Segoe UI", 18, "bold")
@@ -86,8 +96,24 @@ class MinerGui(tk.Tk):
                 root, textvariable=variable, show="*" if secret else ""
             ).grid(row=row, column=1, columnspan=2, sticky="ew", pady=4)
 
+        credential_actions = ttk.Frame(root)
+        credential_actions.grid(row=4, column=1, columnspan=2, sticky="w")
+        self.remember_checkbox = ttk.Checkbutton(
+            credential_actions,
+            text="Lembrar credenciais neste computador",
+            variable=self.remember_credentials,
+        )
+        self.remember_checkbox.pack(side="left")
+        if not can_store_credentials():
+            self.remember_checkbox.configure(state="disabled")
+        ttk.Button(
+            credential_actions,
+            text="Como obter credenciais?",
+            command=lambda: webbrowser.open(OAUTH_SETTINGS_URL),
+        ).pack(side="left", padx=(12, 0))
+
         options = ttk.Frame(root)
-        options.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(8, 4))
+        options.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(8, 4))
         ttk.Label(options, text="Limite paginas (0=ate parar)").grid(row=0, column=0)
         ttk.Spinbox(
             options, from_=0, to=100000, textvariable=self.pages, width=8
@@ -105,24 +131,24 @@ class MinerGui(tk.Tk):
             row=0, column=7, padx=(6, 0)
         )
 
-        ttk.Label(root, text="Formato").grid(row=5, column=0, sticky="w", pady=4)
+        ttk.Label(root, text="Formato").grid(row=6, column=0, sticky="w", pady=4)
         ttk.Combobox(
             root, textvariable=self.format, values=("json", "csv", "txt"),
             state="readonly", width=8,
-        ).grid(row=5, column=1, sticky="w", pady=4)
+        ).grid(row=6, column=1, sticky="w", pady=4)
 
         ttk.Label(root, text="Arquivo de saida").grid(
-            row=6, column=0, sticky="w", pady=4
+            row=7, column=0, sticky="w", pady=4
         )
         ttk.Entry(root, textvariable=self.output).grid(
-            row=6, column=1, sticky="ew", pady=4
+            row=7, column=1, sticky="ew", pady=4
         )
         ttk.Button(root, text="Escolher...", command=self._choose_output).grid(
-            row=6, column=2, padx=(8, 0), pady=4
+            row=7, column=2, padx=(8, 0), pady=4
         )
 
         direct = ttk.LabelFrame(root, text="Verificar um MP diretamente", padding=8)
-        direct.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(8, 4))
+        direct.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(8, 4))
         direct.columnconfigure(0, weight=1)
         ttk.Entry(direct, textvariable=self.direct_mp).grid(
             row=0, column=0, sticky="ew"
@@ -133,7 +159,7 @@ class MinerGui(tk.Tk):
         self.verify_button.grid(row=0, column=1, padx=(8, 0))
 
         actions = ttk.Frame(root)
-        actions.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(10, 8))
+        actions.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(10, 8))
         self.search_button = ttk.Button(
             actions, text="Iniciar fila", command=self._start
         )
@@ -149,13 +175,13 @@ class MinerGui(tk.Tk):
         self.open_button.pack(side="left", padx=8)
 
         self.progress = ttk.Progressbar(root, mode="indeterminate")
-        self.progress.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+        self.progress.grid(row=10, column=0, columnspan=3, sticky="ew", pady=(0, 6))
         ttk.Label(root, textvariable=self.status).grid(
-            row=10, column=0, columnspan=3, sticky="w"
+            row=11, column=0, columnspan=3, sticky="w"
         )
 
         frame = ttk.Frame(root)
-        frame.grid(row=11, column=0, columnspan=3, sticky="nsew", pady=(8, 0))
+        frame.grid(row=12, column=0, columnspan=3, sticky="nsew", pady=(8, 0))
         frame.rowconfigure(0, weight=1)
         frame.columnconfigure(0, weight=1)
         self.listbox = tk.Listbox(frame, font=("Consolas", 10))
@@ -177,8 +203,10 @@ class MinerGui(tk.Tk):
         client_id = self.client_id.get().strip()
         secret = self.client_secret.get()
         try:
-            if client_id and secret:
+            if self.remember_credentials.get() and client_id and secret:
                 save_credentials(client_id, secret)
+            else:
+                delete_credentials()
         except OSError as exc:
             messagebox.showwarning(
                 "Credenciais",
@@ -351,7 +379,7 @@ class MinerGui(tk.Tk):
 
     def _open_output(self):
         if self.last_output:
-            os.startfile(self.last_output.resolve())
+            webbrowser.open(self.last_output.resolve().as_uri())
 
 
 if __name__ == "__main__":

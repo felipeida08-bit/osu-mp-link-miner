@@ -8,3 +8,6 @@ resultados_*.txt
 build/
 dist/
 *.spec
+*.pfx
+*.p12
+certificate-base64.txt

@@ -1,4 +1,10 @@
-"""Persistencia local das credenciais OAuth usando Windows DPAPI."""
+"""Persistencia local opcional das credenciais OAuth.
+
+No Windows, o Client Secret e protegido com DPAPI e so pode ser recuperado pelo
+mesmo usuario. Em outros sistemas, as credenciais nao sao gravadas; nesses
+casos, a interface e a CLI ainda podem recebe-las manualmente ou por variaveis
+de ambiente.
+"""
 import base64
 import ctypes
 import json
@@ -9,6 +15,11 @@ from pathlib import Path
 
 APP_NAME = "osu-mp-link-miner"
 CRYPTPROTECT_UI_FORBIDDEN = 0x01
+
+
+def can_store_credentials():
+    """Indica se ha armazenamento seguro implementado neste sistema."""
+    return os.name == "nt"
 
 
 class DataBlob(ctypes.Structure):
@@ -69,6 +80,8 @@ def _unprotect(value):
 
 def save_credentials(client_id, client_secret, path=None):
     """Salva o ID e o secret criptografado para o usuario atual do Windows."""
+    if not can_store_credentials():
+        raise OSError("O armazenamento seguro de credenciais requer o Windows.")
     target = Path(path) if path else config_path()
     target.parent.mkdir(parents=True, exist_ok=True)
     protected = base64.b64encode(_protect(client_secret)).decode("ascii")
@@ -80,6 +93,8 @@ def save_credentials(client_id, client_secret, path=None):
 
 def load_credentials(path=None):
     """Retorna credenciais salvas ou strings vazias se ainda nao existirem."""
+    if not can_store_credentials():
+        return "", ""
     target = Path(path) if path else config_path()
     if not target.exists():
         return "", ""
@@ -92,3 +107,12 @@ def load_credentials(path=None):
         return str(payload.get("client_id", "")), secret
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         return "", ""
+
+
+def delete_credentials(path=None):
+    """Remove as credenciais locais, caso existam."""
+    target = Path(path) if path else config_path()
+    try:
+        target.unlink()
+    except FileNotFoundError:
+        pass
