@@ -125,58 +125,12 @@ python -m venv .venv
 
 O diretorio `dist/` e ignorado de proposito: binarios gerados nao ficam no
 historico Git. Ao enviar uma tag `v*`, o GitHub Actions cria o executavel,
-assina e verifica o arquivo, calcula seu SHA-256 e publica os dois arquivos em
-uma GitHub Release:
+calcula seu SHA-256 e publica os dois arquivos em uma GitHub Release:
 
 ```powershell
 git tag v1.0.0
 git push origin v1.0.0
 ```
-
-### Assinatura do executavel
-
-Uma Release exige um certificado Authenticode de assinatura de codigo emitido
-por uma autoridade certificadora confiavel. Certificados autoassinados mostram
-o nome do editor apenas em computadores nos quais tenham sido instalados como
-confiaveis e, portanto, nao resolvem o aviso para o publico.
-
-Configure estes Secrets no repositorio antes de criar uma tag:
-
-- `WINDOWS_SIGNING_CERTIFICATE_BASE64`: conteudo Base64 do arquivo PFX;
-- `WINDOWS_SIGNING_CERTIFICATE_PASSWORD`: senha do PFX.
-
-No PowerShell, gere o texto Base64 e envie os Secrets com GitHub CLI:
-
-```powershell
-$certificate = "C:\caminho-seguro\code-signing.pfx"
-$encoded = [Convert]::ToBase64String([IO.File]::ReadAllBytes($certificate))
-$encoded | Set-Content -NoNewline .\certificate-base64.txt
-
-gh secret set WINDOWS_SIGNING_CERTIFICATE_BASE64 --body (Get-Content -Raw .\certificate-base64.txt)
-gh secret set WINDOWS_SIGNING_CERTIFICATE_PASSWORD
-```
-
-O PFX e sua senha nunca devem ser adicionados ao Git. Os padroes `*.pfx`,
-`*.p12` e `certificate-base64.txt` estao bloqueados pelo `.gitignore`.
-Durante o workflow, o certificado existe somente no diretorio temporario do
-runner e e removido mesmo se a assinatura falhar. Uma tag sem os dois Secrets
-falha antes da publicacao, impedindo uma Release oficial sem assinatura.
-
-Para assinar um build local usando um certificado instalado no Windows:
-
-```powershell
-.\sign.ps1 `
-    -ExecutablePath .\dist\osu-mp-link-miner.exe `
-    -CertificateThumbprint "IMPRESSAO_DIGITAL_SHA1_DO_CERTIFICADO"
-```
-
-Tambem e possivel usar `-CertificatePath` e `-CertificatePassword` com um
-PFX. O script usa SHA-256, adiciona carimbo de tempo RFC 3161 e recusa a
-assinatura se a verificacao Authenticode nao retornar `Valid`.
-
-Uma assinatura valida remove a identificacao **Editor desconhecido**. O filtro
-SmartScreen pode continuar exibindo uma advertencia enquanto o novo certificado
-ou aplicativo ainda nao tiver reputacao suficiente.
 
 ## Licenca
 

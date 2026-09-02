@@ -43,33 +43,6 @@ jobs:
         shell: pwsh
         run: .\build.ps1
 
-      - name: Assinar executavel da Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: pwsh
-        env:
-          SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
-          SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
-        run: |
-          if ([string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE_BASE64) -or
-              [string]::IsNullOrWhiteSpace($env:SIGNING_CERTIFICATE_PASSWORD)) {
-              throw "Configure os secrets WINDOWS_SIGNING_CERTIFICATE_BASE64 e WINDOWS_SIGNING_CERTIFICATE_PASSWORD."
-          }
-
-          $certificatePath = Join-Path $env:RUNNER_TEMP "osu-mp-link-miner-signing.pfx"
-          try {
-              $bytes = [Convert]::FromBase64String($env:SIGNING_CERTIFICATE_BASE64)
-              [IO.File]::WriteAllBytes($certificatePath, $bytes)
-              .\sign.ps1 `
-                  -ExecutablePath ".\dist\osu-mp-link-miner.exe" `
-                  -CertificatePath $certificatePath `
-                  -CertificatePassword $env:SIGNING_CERTIFICATE_PASSWORD
-          }
-          finally {
-              if (Test-Path -LiteralPath $certificatePath) {
-                  Remove-Item -LiteralPath $certificatePath -Force
-              }
-          }
-
       - name: Gerar SHA-256
         shell: pwsh
         run: |
